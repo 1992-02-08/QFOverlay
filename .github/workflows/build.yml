@@ -15,7 +15,7 @@ jobs:
       - name: Install ldid + Pillow（图标生成用）
         run: |
           brew install ldid
-          python3 -m pip install --user Pillow || echo "Pillow 安装失败，图标将跳过（不影响功能）"
+          python3 -m pip install --user Pillow --break-system-packages || python3 -m pip install --user Pillow || echo "Pillow 安装失败，图标将跳过（不影响功能）"
 
       - name: Build .tipa
         run: |
