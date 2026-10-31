@@ -1020,7 +1020,7 @@ static BOOL QFOverlayBoolMsg(id object, NSString *selName) {
 
 #pragma mark - 插件进程入口
 
-@implementation QFOverlayHUD
+@implementation QFOverlayHUD (PluginEntry)
 
 + (void)runPlugin {
     @autoreleasepool {
