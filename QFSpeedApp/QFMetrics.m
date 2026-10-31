@@ -103,7 +103,7 @@ static BOOL QFBatterySensor(double *voltage, double *amperage, double *temperatu
     if (cfTemp && temperature) {
         int deciC = 0;
         CFNumberGetValue(cfTemp, kCFNumberIntType, &deciC);
-        *temperature = deciC / 10.0; // 0.1°C -> °C
+        *temperature = deciC / 100.0; // AppleSmartBattery Temperature 单位 0.01°C -> °C
         CFRelease(cfTemp);
     }
 
