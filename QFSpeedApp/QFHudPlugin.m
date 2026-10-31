@@ -567,7 +567,7 @@ static NSAttributedString *QFHudComposeText(void) {
     CGFloat fontSize = gBarFontSize;
     NSDictionary *attrs = @{
         NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:fontSize weight:UIFontWeightSemibold],
-        NSForegroundColorAttributeName: [UIColor colorWithRed:1.0 green:0.23 blue:0.19 alpha:0.98],
+        NSForegroundColorAttributeName: [UIColor colorWithWhite:1.0 alpha:0.96],
     };
     NSDictionary *sepA = @{
         NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:fontSize * 0.82 weight:UIFontWeightRegular],
@@ -603,7 +603,7 @@ static NSAttributedString *QFHudComposeText(void) {
             [items addObject:QFIconAttrText(@"bolt.fill", [NSString stringWithFormat:@"%.1fW", metrics.wattage], attrs, fontSize)];
         }
         if (gHudShowTemp) {
-            [items addObject:QFIconAttrText(@"thermometer", [NSString stringWithFormat:@"%.1f°C", metrics.temperature], attrs, fontSize)];
+            [items addObject:QFIconAttrText(@"thermometer", [NSString stringWithFormat:@"%.1f°", metrics.temperature], attrs, fontSize)];
         }
     } else {
         if (gHudShowCPU) {
@@ -632,7 +632,7 @@ static NSAttributedString *QFHudComposeText(void) {
             [items addObject:QFIconAttrText(@"bolt.fill", [NSString stringWithFormat:@"%.1fW", metrics.wattage], attrs, fontSize)];
         }
         if (gHudShowTemp) {
-            [items addObject:QFIconAttrText(@"thermometer", [NSString stringWithFormat:@"%.1f°C", metrics.temperature], attrs, fontSize)];
+            [items addObject:QFIconAttrText(@"thermometer", [NSString stringWithFormat:@"%.1f°", metrics.temperature], attrs, fontSize)];
         }
     }
     if (items.count == 0) {
