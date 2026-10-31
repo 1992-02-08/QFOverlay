@@ -170,6 +170,8 @@ static BOOL QFSPWrite(NSString *key, id value) {
 @property (nonatomic, copy) void (^onChange)(BOOL on);
 @property (nonatomic, assign, readonly) BOOL on;
 @property (nonatomic, copy) NSString *iconName;
+@property (nonatomic, copy) NSString *onText;
+@property (nonatomic, copy) NSString *offText;
 + (instancetype)title:(NSString *)title value:(BOOL)value;
 + (instancetype)title:(NSString *)title subtitle:(NSString *)subtitle value:(BOOL)value;
 - (void)setOn:(BOOL)on animated:(BOOL)animated;
@@ -182,6 +184,7 @@ static BOOL QFSPWrite(NSString *key, id value) {
     UILabel *_nameLabel;
     UILabel *_detailLabel;
     UIImageView *_checkIcon;
+    UILabel *_toggleLabel;
     BOOL _on;
 }
 
@@ -285,12 +288,33 @@ static BOOL QFSPWrite(NSString *key, id value) {
 
 - (void)setOn:(BOOL)on animated:(BOOL)animated {
     _on = on;
+    BOOL useText = (self.onText.length > 0 || self.offText.length > 0);
     void (^apply)(void) = ^{
-        // IPA 勾选圆圈：白色实心圆+对勾（开）/ 灰色空心圆（关）
-        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:22.0 weight:UIFontWeightMedium];
-        self->_checkIcon.image = [UIImage systemImageNamed:(on ? @"checkmark.circle.fill" : @"circle")
-                                        withConfiguration:config];
-        self->_checkIcon.tintColor = on ? [UIColor whiteColor] : [UIColor colorWithWhite:1.0 alpha:0.25];
+        if (useText) {
+            // 文字胶囊模式：显示「开启/关闭」文字，藏在右侧
+            self->_checkIcon.hidden = YES;
+            if (!self->_toggleLabel) {
+                self->_toggleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+                self->_toggleLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightMedium];
+                self->_toggleLabel.textAlignment = NSTextAlignmentRight;
+                self->_toggleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+                [self addSubview:self->_toggleLabel];
+                [NSLayoutConstraint activateConstraints:@[
+                    [self->_toggleLabel.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-16.0],
+                    [self->_toggleLabel.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+                ]];
+            }
+            self->_toggleLabel.text = on ? (self.onText ?: @"开启") : (self.offText ?: @"关闭");
+            self->_toggleLabel.textColor = on ? [UIColor whiteColor] : [UIColor colorWithWhite:1.0 alpha:0.45];
+        } else {
+            // IPA 勾选圆圈：白色实心圆+对勾（开）/ 灰色空心圆（关）
+            self->_checkIcon.hidden = NO;
+            self->_toggleLabel.hidden = YES;
+            UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:22.0 weight:UIFontWeightMedium];
+            self->_checkIcon.image = [UIImage systemImageNamed:(on ? @"checkmark.circle.fill" : @"circle")
+                                            withConfiguration:config];
+            self->_checkIcon.tintColor = on ? [UIColor whiteColor] : [UIColor colorWithWhite:1.0 alpha:0.25];
+        }
     };
     if (animated) {
         [UIView animateWithDuration:0.16 delay:0.0 options:UIViewAnimationOptionBeginFromCurrentState

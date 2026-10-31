@@ -153,6 +153,12 @@ static BOOL QFBatterySensor(double *voltage, double *amperage, double *temperatu
     NSTimeInterval _previousTime;
     uint64_t _previousIn;
     uint64_t _previousOut;
+    QFFPSCounter *_fpsCounter;
+    double _fps;
+    double _voltage;
+    double _amperage;
+    double _wattage;
+    double _temperature;
 }
 
 + (instancetype)shared {

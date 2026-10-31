@@ -599,12 +599,11 @@ static NSAttributedString *QFHudComposeText(void) {
             [items addObject:QFIconAttrText(@"waveform.path.ecg", [NSString stringWithFormat:@"%.0fmA", metrics.amperage], attrs, fontSize)];
         }
         if (gHudShowWatt) {
-            [items addObject:QFIconAttrText:@"bolt.fill", [NSString stringWithFormat:@"%.1fW", metrics.wattage], attrs, fontSize)];
+            [items addObject:QFIconAttrText(@"bolt.fill", [NSString stringWithFormat:@"%.1fW", metrics.wattage], attrs, fontSize)];
         }
         if (gHudShowTemp) {
             [items addObject:QFIconAttrText(@"thermometer", [NSString stringWithFormat:@"%.1f°C", metrics.temperature], attrs, fontSize)];
         }
-    } else {
     } else {
         if (gHudShowCPU) {
             [items addObject:QFIconAttrText(@"cpu", [NSString stringWithFormat:@"%.0f%%", metrics.cpuPercent], attrs, fontSize)];
@@ -629,13 +628,13 @@ static NSAttributedString *QFHudComposeText(void) {
             [items addObject:QFIconAttrText(@"waveform.path.ecg", [NSString stringWithFormat:@"%.0fmA", metrics.amperage], attrs, fontSize)];
         }
         if (gHudShowWatt) {
-            [items addObject:QFIconAttrText:@"bolt.fill", [NSString stringWithFormat:@"%.1fW", metrics.wattage], attrs, fontSize)];
+            [items addObject:QFIconAttrText(@"bolt.fill", [NSString stringWithFormat:@"%.1fW", metrics.wattage], attrs, fontSize)];
         }
         if (gHudShowTemp) {
             [items addObject:QFIconAttrText(@"thermometer", [NSString stringWithFormat:@"%.1f°C", metrics.temperature], attrs, fontSize)];
         }
     }
-    if (items.count == 0) {    if (items.count == 0) {
+    if (items.count == 0) {
         return [[NSAttributedString alloc] initWithString:@"无显示项" attributes:attrs];
     }
     NSMutableAttributedString *result = [[NSMutableAttributedString alloc] init];
