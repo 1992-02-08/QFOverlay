@@ -647,12 +647,12 @@ static NSAttributedString *QFHudComposeText(void) {
 
 static void QFHudRefreshText(void) {
     if (!gHudBar) return;
+    NSDictionary *fa = @{
+        NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:gBarFontSize weight:UIFontWeightSemibold],
+        NSForegroundColorAttributeName: [UIColor colorWithWhite:1.0 alpha:0.96],
+    };
     // 提示语期间盖掉指标；锁定时给指标加 🔒 前缀 —— 状态必须一眼看得见。
     if (gFlashText && [NSDate timeIntervalSinceReferenceDate] < gFlashUntil) {
-        NSDictionary *fa = @{
-            NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:gBarFontSize weight:UIFontWeightSemibold],
-            NSForegroundColorAttributeName: [UIColor colorWithWhite:1.0 alpha:0.96],
-        };
         [gHudBar setAttributedText:[[NSAttributedString alloc] initWithString:gFlashText attributes:fa]];
     } else {
         NSAttributedString *text = QFHudComposeText();
