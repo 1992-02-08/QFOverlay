@@ -33,6 +33,7 @@ clang -arch "${ARCH}" \
       -fobjc-arc -fblocks -O2 -Wno-deprecated-declarations \
       -framework UIKit -framework Foundation -framework QuartzCore -framework CoreGraphics \
       -framework AVFoundation -framework AVKit -framework CoreMedia -framework CoreVideo \
+      -framework IOKit \
       -o "${OUT_BIN}" \
       main.m QFHostController.m QFSettingsPanel.m QFMetrics.m QFFloatingBar.m QFPiPBar.m QFHudPlugin.m
 
