@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 改成你自己 app 的 bundle id（要跟你工程的 Info.plist 一致） -->
+	<key>application-identifier</key>
+	<string>com.qfspeed.hudapp</string>
+
+	<!-- 常驻窗口的根基：进程被当作平台二进制，私有服务才认它 -->
+	<key>platform-application</key>
+	<true/>
+	<key>com.apple.private.security.no-sandbox</key>
+	<true/>
+	<!-- 把浮窗窗口注册到 SpringBoard 的门票（缺了就是「日志正常、屏幕啥都没有」） -->
+	<key>com.apple.springboard.accessibility-window-hosting</key>
+	<true/>
+	<key>com.apple.backboard.client</key>
+	<true/>
+	<key>com.apple.QuartzCore.displayable-context</key>
+	<true/>
+
+	<!-- 拖动触摸通路：窗口自身不一定吃得到 UITouch，浮条拖动靠 HID 监听算坐标 -->
+	<key>com.apple.private.hid.client.event-monitor</key>
+	<true/>
+	<key>com.apple.private.hid.client.event-dispatch</key>
+	<true/>
+
+	<!-- 抗 jetsam：让 -hud 子进程活得更久，切 app / 锁屏不断 -->
+	<key>com.apple.private.kernel.jetsam</key>
+	<true/>
+	<key>com.apple.private.memorystatus</key>
+	<true/>
+
+	<!-- 子进程以 root 身份拉起需要 -->
+	<key>com.apple.private.persona-mgmt</key>
+	<true/>
+
+	<!-- 共享偏好读写（CFPreferences AnyUser） -->
+	<key>user-preference-read</key>
+	<true/>
+	<key>user-preference-write</key>
+	<true/>
+	<key>file-read-data</key>
+	<true/>
+
+	<!-- 调试期可留，发布建议去掉 -->
+	<key>get-task-allow</key>
+	<true/>
+</dict>
+</plist>

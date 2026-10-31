@@ -1,0 +1,26 @@
+name: Build QFOverlay .tipa
+
+on:
+  workflow_dispatch:        # 手动在 Actions 页点 Run workflow 即可触发
+  push:
+    branches: ["main"]
+
+jobs:
+  build:
+    runs-on: macos-latest   # 必须 macOS runner：本地沙箱无 SDK，真编译在 GitHub 上跑
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ldid
+        run: brew install ldid
+
+      - name: Build .tipa
+        run: ./build-tipa.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QFOverlay-tipa
+          path: "*.tipa"
+          if-no-files-found: error

@@ -1,0 +1,5 @@
+build/
+*.tipa
+*.o
+*.arm64
+.DS_Store
