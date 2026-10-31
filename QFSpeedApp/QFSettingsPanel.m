@@ -794,12 +794,6 @@ static BOOL QFSPWrite(NSString *key, id value) {
     };
     self.overlayRow = overlayRow;
 
-    // 把面板这一刻真实读到的键值摊开。
-    // "开关按了没反应"这类问题，靠猜永远猜不到；把读到的原始值显示出来，
-    // 一眼就能分清是「偏好里本来就是关的」还是「面板没读到」。
-    // 实时值行：每次改开关都会跟着变，不会出现"我已经关了它还写着 1"的错觉。
-    UIView *digestRow = [self digestRow];
-
     // 1.9.0：把"系统到底认没认我们的权限"直接摊在面板上。
     // 浮条不显示时，90% 的原因在这一行就写死了 —— 不用再去翻日志。
     BOOL hosting = QFHasEntitlement(@"com.apple.springboard.accessibility-window-hosting");
@@ -818,14 +812,10 @@ static BOOL QFSPWrite(NSString *key, id value) {
         : (self.overlayUnavailableReason.length > 0
               ? self.overlayUnavailableReason
               : @"当前设备没有可用的常驻浮窗通道");
-    [stack addArrangedSubview:[self cardWithRows:@[overlayRow, digestRow, permissionRow, [self noteRow:hint]]]];
+    [stack addArrangedSubview:[self cardWithRows:@[overlayRow, permissionRow, [self noteRow:hint]]]];
 
     // ── 显示内容
     [stack addArrangedSubview:[self sectionTitle:@"显示项目"]];
-
-    // 浮条预览：点开关的同一秒就能看到文字变成什么样，不用抬头去盯屏幕。
-    // 「按了没反应」最难受的是不知道到底改没改到东西 —— 这里直接把结果摊开。
-    [stack addArrangedSubview:[self cardWithRows:@[[self previewRow]]]];
 
     QFToggleRow *compactRow = [QFToggleRow title:@"紧凑模式"
                                         subtitle:@"只省略单位与标签，不隐藏项目"
