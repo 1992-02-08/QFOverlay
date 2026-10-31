@@ -6,12 +6,13 @@
 
 #import <notify.h>
 
-#define QFSPBackground [UIColor colorWithRed:0.035 green:0.035 blue:0.043 alpha:1.0]
-#define QFSPCard       [UIColor colorWithRed:0.094 green:0.094 blue:0.106 alpha:1.0]
+#define QFSPBackground [UIColor blackColor]
+#define QFSPCard       [UIColor colorWithRed:0.11 green:0.11 blue:0.12 alpha:1.0]
 #define QFSPAccent     [UIColor colorWithRed:0.039 green:0.518 blue:1.000 alpha:1.0]
-#define QFSPBody       [UIColor colorWithWhite:1.0 alpha:0.96]
-#define QFSPDim        [UIColor colorWithWhite:0.58 alpha:1.0]
-#define QFSPLine       [UIColor colorWithWhite:1.0 alpha:0.06]
+#define QFSPBody       [UIColor whiteColor]
+#define QFSPDim        [UIColor colorWithWhite:0.55 alpha:1.0]
+#define QFSPLine       [UIColor colorWithWhite:1.0 alpha:0.08]
+#define QFSPCheck      [UIColor whiteColor]
 
 #pragma mark - 偏好小工具
 
@@ -159,23 +160,17 @@ static BOOL QFSPWrite(NSString *key, id value) {
 
 @end
 
-#pragma mark - 行：可点开关（整行点按 + 自绘胶囊）
+#pragma mark - 行：可点开关（IPA 原生 iOS Settings.app 风格：图标 + 标签 + 白色勾选圆圈）
 
-// ★ 2.1.3：彻底不用 UISwitch。
-//
-// UISwitch 放在 UIScrollView 里时，点击会先被滚动容器截走（delaysContentTouches）：
-// 手指快一点只触发"准备滚动"，valueChanged 根本不发。面板里滑杆能拖、开关按不动，
-// 就是这个原因，而且从代码上看不出来 —— 开关的 target/action 明明接好了。
-//
-// 现在整行都是热区（56pt 高、整宽），走 UITapGestureRecognizer，不依赖 UIControl
-// 的事件分发；右侧胶囊是自绘的，开=蓝底"显示"，关=灰底"隐藏"，
-// 点完立刻能看见状态翻转，不需要再去猜有没有生效。
+// ★ IPA SwiftUI 设置面板样式：每行左侧 SF Symbol 图标（灰色），中间标签（白色 16pt），
+//   右侧 checkmark.circle.fill（白色实心圆+对勾）或 circle（空心圆）。
+//   无副标题，高度 44pt，完全对齐 iOS Settings.app 列表行。
+//   保持整行可点（UITapGestureRecognizer），不依赖 UIControl 事件分发。
 @interface QFToggleRow : UIView
 @property (nonatomic, copy) void (^onChange)(BOOL on);
 @property (nonatomic, assign, readonly) BOOL on;
-// 胶囊上的文案。默认「显示 / 隐藏」，常驻浮窗那种开关用「开启 / 关闭」更贴切。
-@property (nonatomic, copy) NSString *onText;
-@property (nonatomic, copy) NSString *offText;
+@property (nonatomic, copy) NSString *iconName;
++ (instancetype)title:(NSString *)title value:(BOOL)value;
 + (instancetype)title:(NSString *)title subtitle:(NSString *)subtitle value:(BOOL)value;
 - (void)setOn:(BOOL)on animated:(BOOL)animated;
 - (void)setSubtitle:(NSString *)subtitle;
@@ -183,11 +178,15 @@ static BOOL QFSPWrite(NSString *key, id value) {
 @end
 
 @implementation QFToggleRow {
+    UIImageView *_iconView;
     UILabel *_nameLabel;
     UILabel *_detailLabel;
-    UIView *_pill;
-    UILabel *_pillLabel;
+    UIImageView *_checkIcon;
     BOOL _on;
+}
+
++ (instancetype)title:(NSString *)title value:(BOOL)value {
+    return [self title:title subtitle:nil value:value];
 }
 
 + (instancetype)title:(NSString *)title subtitle:(NSString *)subtitle value:(BOOL)value {
@@ -196,48 +195,58 @@ static BOOL QFSPWrite(NSString *key, id value) {
     return row;
 }
 
-- (BOOL)on {
-    return _on;
+- (void)setIconName:(NSString *)iconName {
+    _iconName = [iconName copy];
+    if (iconName.length > 0) {
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:17.0 weight:UIFontWeightRegular];
+        _iconView.image = [UIImage systemImageNamed:iconName withConfiguration:config];
+        _iconView.hidden = NO;
+    } else {
+        _iconView.hidden = YES;
+    }
 }
 
 - (void)buildWithTitle:(NSString *)title subtitle:(NSString *)subtitle value:(BOOL)value {
     self.translatesAutoresizingMaskIntoConstraints = NO;
     self.userInteractionEnabled = YES;
-    self.layer.cornerRadius = 12.0;
-    self.layer.cornerCurve = kCACornerCurveContinuous;
 
+    // 左侧图标：灰色 SF Symbol，17pt
+    _iconView = [[UIImageView alloc] initWithFrame:CGRectZero];
+    _iconView.tintColor = [UIColor colorWithWhite:1.0 alpha:0.55];
+    _iconView.contentMode = UIViewContentModeScaleAspectFit;
+    _iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    _iconView.hidden = YES;
+
+    // 标签：白色 16pt Regular
     _nameLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     _nameLabel.text = title;
     _nameLabel.font = [UIFont systemFontOfSize:16.0 weight:UIFontWeightRegular];
     _nameLabel.textColor = QFSPBody;
     _nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
 
-    _pill = [[UIView alloc] initWithFrame:CGRectZero];
-    _pill.layer.cornerRadius = 14.0;
-    _pill.layer.cornerCurve = kCACornerCurveContinuous;
-    _pill.userInteractionEnabled = NO;
-    _pill.translatesAutoresizingMaskIntoConstraints = NO;
+    // 右侧勾选圆圈
+    _checkIcon = [[UIImageView alloc] initWithFrame:CGRectZero];
+    _checkIcon.contentMode = UIViewContentModeScaleAspectFit;
+    _checkIcon.translatesAutoresizingMaskIntoConstraints = NO;
 
-    _pillLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-    _pillLabel.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightSemibold];
-    _pillLabel.textAlignment = NSTextAlignmentCenter;
-    _pillLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    [_pill addSubview:_pillLabel];
-
+    [self addSubview:_iconView];
     [self addSubview:_nameLabel];
-    [self addSubview:_pill];
+    [self addSubview:_checkIcon];
 
-    CGFloat height = 56.0;
+    // IPA 标准行高 44pt
+    CGFloat height = 44.0;
     NSMutableArray *constraints = [NSMutableArray arrayWithObjects:
-        [self.heightAnchor constraintEqualToConstant:height],
-        [_nameLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:16.0],
-        [_nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_pill.leadingAnchor constant:-10.0],
-        [_pill.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-12.0],
-        [_pill.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
-        [_pill.widthAnchor constraintEqualToConstant:66.0],
-        [_pill.heightAnchor constraintEqualToConstant:28.0],
-        [_pillLabel.centerXAnchor constraintEqualToAnchor:_pill.centerXAnchor],
-        [_pillLabel.centerYAnchor constraintEqualToAnchor:_pill.centerYAnchor],
+        [self.heightAnchor constraintGreaterThanOrEqualToConstant:height],
+        [_iconView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:16.0],
+        [_iconView.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+        [_iconView.widthAnchor constraintEqualToConstant:22.0],
+        [_iconView.heightAnchor constraintEqualToConstant:22.0],
+        [_nameLabel.leadingAnchor constraintEqualToAnchor:_iconView.trailingAnchor constant:12.0],
+        [_nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_checkIcon.leadingAnchor constant:-10.0],
+        [_checkIcon.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-16.0],
+        [_checkIcon.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+        [_checkIcon.widthAnchor constraintEqualToConstant:24.0],
+        [_checkIcon.heightAnchor constraintEqualToConstant:24.0],
         nil];
 
     if (subtitle.length > 0) {
@@ -249,11 +258,11 @@ static BOOL QFSPWrite(NSString *key, id value) {
         _detailLabel.translatesAutoresizingMaskIntoConstraints = NO;
         [self addSubview:_detailLabel];
         [constraints addObjectsFromArray:@[
-            [_nameLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:9.0],
+            [_nameLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:10.0],
             [_detailLabel.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
             [_detailLabel.topAnchor constraintEqualToAnchor:_nameLabel.bottomAnchor constant:2.0],
-            [_detailLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_pill.leadingAnchor constant:-10.0],
-            [_detailLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.bottomAnchor constant:-8.0],
+            [_detailLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_checkIcon.leadingAnchor constant:-10.0],
+            [_detailLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.bottomAnchor constant:-10.0],
         ]];
     } else {
         [constraints addObject:[_nameLabel.centerYAnchor constraintEqualToAnchor:self.centerYAnchor]];
@@ -277,9 +286,11 @@ static BOOL QFSPWrite(NSString *key, id value) {
 - (void)setOn:(BOOL)on animated:(BOOL)animated {
     _on = on;
     void (^apply)(void) = ^{
-        self->_pill.backgroundColor = on ? QFSPAccent : [UIColor colorWithWhite:1.0 alpha:0.10];
-        self->_pillLabel.text = on ? (self.onText ?: @"显示") : (self.offText ?: @"隐藏");
-        self->_pillLabel.textColor = on ? UIColor.whiteColor : [UIColor colorWithWhite:0.55 alpha:1.0];
+        // IPA 勾选圆圈：白色实心圆+对勾（开）/ 灰色空心圆（关）
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:22.0 weight:UIFontWeightMedium];
+        self->_checkIcon.image = [UIImage systemImageNamed:(on ? @"checkmark.circle.fill" : @"circle")
+                                        withConfiguration:config];
+        self->_checkIcon.tintColor = on ? [UIColor whiteColor] : [UIColor colorWithWhite:1.0 alpha:0.25];
     };
     if (animated) {
         [UIView animateWithDuration:0.16 delay:0.0 options:UIViewAnimationOptionBeginFromCurrentState
@@ -290,10 +301,22 @@ static BOOL QFSPWrite(NSString *key, id value) {
 }
 
 - (void)setSubtitle:(NSString *)subtitle {
+    if (!_detailLabel && subtitle.length > 0) {
+        _detailLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+        _detailLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightRegular];
+        _detailLabel.textColor = QFSPDim;
+        _detailLabel.numberOfLines = 0;
+        _detailLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        [self addSubview:_detailLabel];
+        [NSLayoutConstraint activateConstraints:@[
+            [_detailLabel.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
+            [_detailLabel.topAnchor constraintEqualToAnchor:_nameLabel.bottomAnchor constant:2.0],
+            [_detailLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_checkIcon.leadingAnchor constant:-10.0],
+        ]];
+    }
     _detailLabel.text = subtitle;
 }
 
-// 不可用时整行置灰、不响应点击 —— 但仍然看得见，别做成"消失"。
 - (void)setEnabledRow:(BOOL)enabled {
     self.userInteractionEnabled = enabled;
     self.alpha = enabled ? 1.0 : 0.45;
@@ -301,7 +324,7 @@ static BOOL QFSPWrite(NSString *key, id value) {
 
 @end
 
-#pragma mark - 行：滑杆
+#pragma mark - 行：滑杆（IPA 风格：标签+数值同一行，滑杆在下方）
 
 @interface QFSliderRow : UIView
 @property (nonatomic, strong) UISlider *slider;
@@ -326,7 +349,7 @@ static BOOL QFSPWrite(NSString *key, id value) {
     name.translatesAutoresizingMaskIntoConstraints = NO;
 
     row.valueLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-    row.valueLabel.font = [UIFont monospacedDigitSystemFontOfSize:14.0 weight:UIFontWeightMedium];
+    row.valueLabel.font = [UIFont monospacedDigitSystemFontOfSize:15.0 weight:UIFontWeightRegular];
     row.valueLabel.textColor = QFSPDim;
     row.valueLabel.textAlignment = NSTextAlignmentRight;
     row.valueLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -336,6 +359,7 @@ static BOOL QFSPWrite(NSString *key, id value) {
     slider.maximumValue = (float)maximum;
     slider.value = (float)value;
     slider.minimumTrackTintColor = QFSPAccent;
+    slider.maximumTrackTintColor = [UIColor colorWithWhite:1.0 alpha:0.15];
     slider.translatesAutoresizingMaskIntoConstraints = NO;
     [slider addTarget:row action:@selector(sliderChanged:) forControlEvents:UIControlEventValueChanged];
     row.slider = slider;
@@ -346,7 +370,7 @@ static BOOL QFSPWrite(NSString *key, id value) {
 
     [NSLayoutConstraint activateConstraints:@[
         [name.leadingAnchor constraintEqualToAnchor:row.leadingAnchor constant:16.0],
-        [name.topAnchor constraintEqualToAnchor:row.topAnchor constant:14.0],
+        [name.topAnchor constraintEqualToAnchor:row.topAnchor constant:12.0],
         [row.valueLabel.trailingAnchor constraintEqualToAnchor:row.trailingAnchor constant:-16.0],
         [row.valueLabel.centerYAnchor constraintEqualToAnchor:name.centerYAnchor],
         [row.valueLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:name.trailingAnchor constant:10.0],
@@ -364,9 +388,6 @@ static BOOL QFSPWrite(NSString *key, id value) {
 - (void)sliderChanged:(UISlider *)sender {
     double value = (double)sender.value;
     [self refreshLabel:value];
-    // 拖动一次会触发几十上百次 valueChanged。每次都写共享偏好 + notify_post，
-    // 就是日志里那种"一秒 50 条 收到设置变更"的来源：写盘风暴 + 每个浮窗进程各刷一遍。
-    // 250ms 合并一次，松手那一刻的值一定落盘。
     self.pendingValue = value;
     [NSObject cancelPreviousPerformRequestsWithTarget:self
                                              selector:@selector(commitPendingValue)
@@ -657,13 +678,13 @@ static BOOL QFSPWrite(NSString *key, id value) {
     header.translatesAutoresizingMaskIntoConstraints = NO;
 
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectZero];
-    title.text = @"浮窗设置";
-    title.font = [UIFont systemFontOfSize:26.0 weight:UIFontWeightBold];
+    title.text = @"QFSpeed";
+    title.font = [UIFont systemFontOfSize:34.0 weight:UIFontWeightBold];
     title.textColor = UIColor.whiteColor;
     title.translatesAutoresizingMaskIntoConstraints = NO;
 
     UILabel *subtitle = [[UILabel alloc] initWithFrame:CGRectZero];
-    subtitle.text = @"改完立刻生效，不用重启浮窗";
+    subtitle.text = @"浮窗设置 · 改完立刻生效";
     subtitle.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightRegular];
     subtitle.textColor = QFSPDim;
     subtitle.translatesAutoresizingMaskIntoConstraints = NO;
@@ -728,6 +749,7 @@ static BOOL QFSPWrite(NSString *key, id value) {
         statusText = @"已停止 —— 点右侧「开启」，浮条立刻出现";
     }
     QFToggleRow *overlayRow = [QFToggleRow title:@"常驻浮窗" subtitle:statusText value:running];
+    overlayRow.iconName = @"rectangle.dashed.badge.record";
     overlayRow.onText = @"开启";
     overlayRow.offText = @"关闭";
     [overlayRow setEnabledRow:self.overlaySupported];
@@ -775,7 +797,7 @@ static BOOL QFSPWrite(NSString *key, id value) {
     [stack addArrangedSubview:[self cardWithRows:@[overlayRow, digestRow, permissionRow, [self noteRow:hint]]]];
 
     // ── 显示内容
-    [stack addArrangedSubview:[self sectionTitle:@"显示内容"]];
+    [stack addArrangedSubview:[self sectionTitle:@"显示项目"]];
 
     // 浮条预览：点开关的同一秒就能看到文字变成什么样，不用抬头去盯屏幕。
     // 「按了没反应」最难受的是不知道到底改没改到东西 —— 这里直接把结果摊开。
@@ -784,39 +806,84 @@ static BOOL QFSPWrite(NSString *key, id value) {
     QFToggleRow *compactRow = [QFToggleRow title:@"紧凑模式"
                                         subtitle:@"只省略单位与标签，不隐藏项目"
                                            value:QFSPFlag(state, @"compact", NO)];
+    compactRow.iconName = @"text.alignleft";
     compactRow.onChange = ^(BOOL on) {
         [weakSelf writeKey:@"compact" value:@(on)];
     };
     self.compactSwitch = compactRow;
 
-    QFToggleRow *netRow = [QFToggleRow title:@"网速" subtitle:nil
+    QFToggleRow *netRow = [QFToggleRow title:@"网速"
                                       value:QFSPFlag(state, @"showNetwork", YES)];
+    netRow.iconName = @"wifi";
     netRow.onChange = ^(BOOL on) {
         [weakSelf writeKey:@"showNetwork" value:@(on)];
     };
 
-    QFToggleRow *cpuRow = [QFToggleRow title:@"CPU 占用" subtitle:nil
+    QFToggleRow *cpuRow = [QFToggleRow title:@"CPU 占用"
                                       value:QFSPFlag(state, @"showCPU", YES)];
+    cpuRow.iconName = @"cpu";
     cpuRow.onChange = ^(BOOL on) {
         [weakSelf writeKey:@"showCPU" value:@(on)];
         if (on) [weakSelf leaveCompactMode];
     };
 
-    QFToggleRow *memRow = [QFToggleRow title:@"内存占用" subtitle:nil
+    QFToggleRow *memRow = [QFToggleRow title:@"内存占用"
                                       value:QFSPFlag(state, @"showMemory", YES)];
+    memRow.iconName = @"memorychip";
     memRow.onChange = ^(BOOL on) {
         [weakSelf writeKey:@"showMemory" value:@(on)];
         if (on) [weakSelf leaveCompactMode];
     };
 
-    QFToggleRow *batteryRow = [QFToggleRow title:@"电量" subtitle:nil
+    QFToggleRow *batteryRow = [QFToggleRow title:@"电池电量"
                                           value:QFSPFlag(state, @"showBattery", YES)];
+    batteryRow.iconName = @"battery.100";
     batteryRow.onChange = ^(BOOL on) {
         [weakSelf writeKey:@"showBattery" value:@(on)];
         if (on) [weakSelf leaveCompactMode];
     };
 
-    [stack addArrangedSubview:[self cardWithRows:@[compactRow, netRow, cpuRow, memRow, batteryRow]]];
+    QFToggleRow *fpsRow = [QFToggleRow title:@"FPS 帧率"
+                                       value:QFSPFlag(state, @"showFPS", YES)];
+    fpsRow.iconName = @"gauge";
+    fpsRow.onChange = ^(BOOL on) {
+        [weakSelf writeKey:@"showFPS" value:@(on)];
+        if (on) [weakSelf leaveCompactMode];
+    };
+
+    QFToggleRow *voltRow = [QFToggleRow title:@"电压"
+                                        value:QFSPFlag(state, @"showVoltage", YES)];
+    voltRow.iconName = @"bolt";
+    voltRow.onChange = ^(BOOL on) {
+        [weakSelf writeKey:@"showVoltage" value:@(on)];
+        if (on) [weakSelf leaveCompactMode];
+    };
+
+    QFToggleRow *ampRow = [QFToggleRow title:@"电流"
+                                       value:QFSPFlag(state, @"showAmpere", YES)];
+    ampRow.iconName = @"waveform.path.ecg";
+    ampRow.onChange = ^(BOOL on) {
+        [weakSelf writeKey:@"showAmpere" value:@(on)];
+        if (on) [weakSelf leaveCompactMode];
+    };
+
+    QFToggleRow *wattRow = [QFToggleRow title:@"瓦特"
+                                        value:QFSPFlag(state, @"showWatt", YES)];
+    wattRow.iconName = @"bolt.fill";
+    wattRow.onChange = ^(BOOL on) {
+        [weakSelf writeKey:@"showWatt" value:@(on)];
+        if (on) [weakSelf leaveCompactMode];
+    };
+
+    QFToggleRow *tempRow = [QFToggleRow title:@"温度"
+                                        value:QFSPFlag(state, @"showTemp", YES)];
+    tempRow.iconName = @"thermometer";
+    tempRow.onChange = ^(BOOL on) {
+        [weakSelf writeKey:@"showTemp" value:@(on)];
+        if (on) [weakSelf leaveCompactMode];
+    };
+
+    [stack addArrangedSubview:[self cardWithRows:@[compactRow, cpuRow, fpsRow, netRow, memRow, batteryRow, voltRow, ampRow, wattRow, tempRow]]];
     [self refreshPreview];
 
     // ── 外观
@@ -833,7 +900,7 @@ static BOOL QFSPWrite(NSString *key, id value) {
     [alphaRow setValue:QFSPNumber(state, @"bgAlpha", 0.38)];
     self.alphaRow = alphaRow;
 
-    QFSliderRow *fontRow = [QFSliderRow title:@"字号" minimum:8.0 maximum:20.0
+    QFSliderRow *fontRow = [QFSliderRow title:@"字体大小" minimum:8.0 maximum:20.0
                                         value:QFSPNumber(state, @"fontSize", 11.5)];
     fontRow.formatter = ^NSString *(double value) { return [NSString stringWithFormat:@"%.1f pt", value]; };
     fontRow.onChange = ^(double value) { QFSPWrite(@"fontSize", @(value)); };
@@ -848,16 +915,19 @@ static BOOL QFSPWrite(NSString *key, id value) {
     QFToggleRow *rotateRow = [QFToggleRow title:@"跟随屏幕旋转"
                                         subtitle:@"横屏看视频时浮条跟着转正"
                                            value:QFSPFlag(state, @"followRotation", YES)];
+    rotateRow.iconName = @"arrow.triangle.2.circlepath";
     rotateRow.onChange = ^(BOOL on) { [weakSelf writeKey:@"followRotation" value:@(on)]; };
 
     QFToggleRow *hideRow = [QFToggleRow title:@"横屏时隐藏"
                                       subtitle:@"全屏看电影时自动收起浮条"
                                          value:QFSPFlag(state, @"hideInLandscape", NO)];
+    hideRow.iconName = @"eye.slash";
     hideRow.onChange = ^(BOOL on) { [weakSelf writeKey:@"hideInLandscape" value:@(on)]; };
 
     QFToggleRow *lockRow = [QFToggleRow title:@"锁定位置"
                                       subtitle:@"锁住后拖不动；浮条上长按 0.55 秒可随时切换"
                                          value:QFSPFlag(state, @"locked", NO)];
+    lockRow.iconName = @"lock";
     lockRow.onChange = ^(BOOL on) { [weakSelf writeKey:@"locked" value:@(on)]; };
 
     [stack addArrangedSubview:[self cardWithRows:@[rotateRow, hideRow, lockRow]]];
@@ -1000,8 +1070,9 @@ static BOOL QFSPWrite(NSString *key, id value) {
 - (UILabel *)sectionTitle:(NSString *)text {
     UILabel *label = [[UILabel alloc] initWithFrame:CGRectZero];
     label.text = text;
-    label.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightSemibold];
+    label.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightMedium];
     label.textColor = QFSPDim;
+    label.text = [NSString stringWithFormat:@"  %@", text];
     return label;
 }
 
@@ -1059,7 +1130,7 @@ static BOOL QFSPWrite(NSString *key, id value) {
 - (UIView *)cardWithRows:(NSArray<UIView *> *)rows {
     UIView *card = [[UIView alloc] initWithFrame:CGRectZero];
     card.backgroundColor = QFSPCard;
-    card.layer.cornerRadius = 16.0;
+    card.layer.cornerRadius = 20.0;
     card.layer.cornerCurve = kCACornerCurveContinuous;
     card.translatesAutoresizingMaskIntoConstraints = NO;
 

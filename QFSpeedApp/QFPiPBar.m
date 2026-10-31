@@ -88,7 +88,7 @@ static const CGFloat QFCanvasHeight = 192.0;
         // 渲染层必须真的挂在视图层级里（hidden / alpha 0 会让 isPictureInPicturePossible 变 false），
         // 所以塞一个 2x2 的透明锚点，用户看不见，但系统认为它在渲染。
         self.anchorView = [[UIView alloc] initWithFrame:CGRectMake(2.0, 2.0, 2.0, 2.0)];
-        self.anchorView.backgroundColor = UIColor.blackColor;
+        self.anchorView.backgroundColor = [UIColor colorWithRed:0.08 green:0.08 blue:0.10 alpha:1.0];
         self.anchorView.userInteractionEnabled = NO;
         [host addSubview:self.anchorView];
 
@@ -289,7 +289,8 @@ static const CGFloat QFCanvasHeight = 192.0;
     self.feedTimer = nil;
 }
 
-- (void)updateText:(NSString *)text {
+- (void)updateText:(NSAttributedString *)attributed {
+    NSString *text = attributed.string;
     if (text.length == 0 || [text isEqualToString:self.text]) return;
     self.text = text;
     [self renderFrame];
@@ -385,9 +386,15 @@ static const CGFloat QFCanvasHeight = 192.0;
 }
 
 - (void)drawInContext:(CGContextRef)context size:(CGSize)size {
-    // 背景不能透明（PiP 底色固定），做深色卡片最接近浮条观感。
-    CGContextSetRGBFillColor(context, 0.055, 0.055, 0.070, 1.0);
-    CGContextFillRect(context, CGRectMake(0, 0, size.width, size.height));
+    // IPA 毛玻璃风格：深色渐变底（PiP 底色不能透明，用渐变模拟 Material 观感）
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGFloat locations[] = {0.0, 1.0};
+    NSArray *colors = @[(id)[UIColor colorWithRed:0.11 green:0.11 blue:0.13 alpha:1.0].CGColor,
+                        (id)[UIColor colorWithRed:0.05 green:0.05 blue:0.07 alpha:1.0].CGColor];
+    CGGradientRef gradient = CGGradientCreateWithColors(colorSpace, (__bridge CFArrayRef)colors, locations);
+    CGContextDrawLinearGradient(context, gradient, CGPointMake(0, 0), CGPointMake(0, size.height), 0);
+    CGGradientRelease(gradient);
+    CGColorSpaceRelease(colorSpace);
 
     NSString *text = self.text ?: @"↓0B ↑0B";
     NSArray<NSString *> *parts = [text componentsSeparatedByString:@"  "];
@@ -402,8 +409,8 @@ static const CGFloat QFCanvasHeight = 192.0;
     NSMutableParagraphStyle *centered = [[NSMutableParagraphStyle alloc] init];
     centered.alignment = NSTextAlignmentCenter;
     NSDictionary *primaryAttributes = @{
-        NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:44.0 weight:UIFontWeightSemibold],
-        NSForegroundColorAttributeName: [UIColor colorWithWhite:1.0 alpha:0.97],
+        NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:44.0 weight:UIFontWeightBold],
+        NSForegroundColorAttributeName: [UIColor colorWithWhite:1.0 alpha:0.98],
         NSParagraphStyleAttributeName: centered,
     };
     CGRect primaryRect = CGRectMake(16.0, secondary.length > 0 ? 40.0 : 64.0,
@@ -412,8 +419,8 @@ static const CGFloat QFCanvasHeight = 192.0;
 
     if (secondary.length > 0) {
         NSDictionary *secondaryAttributes = @{
-            NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:26.0 weight:UIFontWeightRegular],
-            NSForegroundColorAttributeName: [UIColor colorWithRed:0.62 green:0.66 blue:0.74 alpha:1.0],
+            NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:26.0 weight:UIFontWeightMedium],
+            NSForegroundColorAttributeName: [UIColor colorWithRed:0.68 green:0.72 blue:0.80 alpha:1.0],
             NSParagraphStyleAttributeName: centered,
         };
         [secondary drawInRect:CGRectMake(16.0, 108.0, size.width - 32.0, 36.0)

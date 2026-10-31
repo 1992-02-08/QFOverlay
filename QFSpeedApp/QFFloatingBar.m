@@ -25,22 +25,31 @@ static NSString *const QFBarYKey = @"bar.y";
 
 @interface QFBarView : UIView
 @property (nonatomic, strong) UILabel *label;
+@property (nonatomic, strong) UIVisualEffectView *blurView;
 @end
 
 @implementation QFBarView
 
 - (instancetype)initWithFrame:(CGRect)frame {
     if ((self = [super initWithFrame:frame])) {
-        self.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.68];
-        self.layer.cornerRadius = 11.0;
+        // IPA 样式：胶囊形 + 毛玻璃
+        self.layer.cornerRadius = frame.size.height / 2.0;
         self.layer.cornerCurve = kCACornerCurveContinuous;
         self.layer.borderWidth = 0.5;
-        self.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.16].CGColor;
+        self.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.18].CGColor;
+        self.layer.masksToBounds = YES;
         self.userInteractionEnabled = YES;
 
+        _blurView = [[UIVisualEffectView alloc] initWithEffect:
+                     [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark]];
+        _blurView.frame = self.bounds;
+        _blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        _blurView.userInteractionEnabled = NO;
+        [self addSubview:_blurView];
+
         _label = [[UILabel alloc] initWithFrame:CGRectZero];
-        _label.font = [UIFont monospacedDigitSystemFontOfSize:12.0 weight:UIFontWeightMedium];
-        _label.textColor = [UIColor colorWithWhite:1.0 alpha:0.96];
+        _label.font = [UIFont monospacedDigitSystemFontOfSize:12.0 weight:UIFontWeightSemibold];
+        _label.textColor = [UIColor colorWithWhite:1.0 alpha:0.97];
         _label.textAlignment = NSTextAlignmentCenter;
         [self addSubview:_label];
     }
@@ -49,14 +58,15 @@ static NSString *const QFBarYKey = @"bar.y";
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    self.label.frame = CGRectInset(self.bounds, 11.0, 3.0);
+    self.layer.cornerRadius = self.bounds.size.height / 2.0;
+    self.label.frame = CGRectInset(self.bounds, 14.0, 3.0);
 }
 
 - (void)sizeToText {
     CGSize fitted = [self.label sizeThatFits:CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX)];
     CGPoint center = self.center;
     CGRect bounds = self.bounds;
-    bounds.size = CGSizeMake(MAX(ceil(fitted.width) + 22.0, 74.0), MAX(ceil(fitted.height) + 8.0, 26.0));
+    bounds.size = CGSizeMake(MAX(ceil(fitted.width) + 28.0, 80.0), MAX(ceil(fitted.height) + 10.0, 28.0));
     self.bounds = bounds;
     self.center = center;
     [self setNeedsLayout];
@@ -112,7 +122,8 @@ static NSString *const QFBarYKey = @"bar.y";
         _window.rootViewController.view.backgroundColor = UIColor.clearColor;
 
         _bar = [[QFBarView alloc] initWithFrame:CGRectMake(0, 0, 200, 26)];
-        _bar.label.text = @"↓0B ↑0B";
+        NSDictionary *ia = @{NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:12.0 weight:UIFontWeightSemibold], NSForegroundColorAttributeName: [UIColor colorWithWhite:1.0 alpha:0.97]};
+        _bar.label.attributedText = [[NSAttributedString alloc] initWithString:@"0B \u2502 0B" attributes:ia];
         [_bar sizeToText];
         [_window.rootViewController.view addSubview:_bar];
         _window.interactiveView = _bar;
@@ -148,9 +159,9 @@ static NSString *const QFBarYKey = @"bar.y";
     }
 }
 
-- (void)updateText:(NSString *)text {
+- (void)updateText:(NSAttributedString *)text {
     if (!_bar) return;
-    _bar.label.text = text;
+    _bar.label.attributedText = text;
     [_bar sizeToText];
     [self clampBar];
 }

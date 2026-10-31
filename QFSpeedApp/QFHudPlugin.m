@@ -131,7 +131,8 @@ static void QFHudMarkTouchArrived(void);
 
 @interface QFHudBarView : UIView
 @property (nonatomic, strong) UILabel *label;
-- (void)setText:(NSString *)text;
+@property (nonatomic, strong) UIVisualEffectView *blurView;
+- (void)setAttributedText:(NSAttributedString *)text;
 - (void)applyBackgroundAlpha:(double)alpha fontSize:(double)fontSize;
 @end
 
@@ -139,18 +140,27 @@ static void QFHudMarkTouchArrived(void);
 
 - (instancetype)initWithFrame:(CGRect)frame {
     if ((self = [super initWithFrame:frame])) {
-        self.layer.cornerRadius = 10.0;
+        // IPA 样式：胶囊形 + 毛玻璃背景
+        self.layer.cornerRadius = frame.size.height / 2.0;
         self.layer.cornerCurve = kCACornerCurveContinuous;
         self.layer.borderWidth = 0.5;
-        self.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.14].CGColor;
+        self.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.18].CGColor;
+        self.layer.masksToBounds = YES;
         // 浮条自己吃触摸：窗口的 hitTest 只把它交出来，拖动/点击走 UIKit 手势。
         self.userInteractionEnabled = YES;
+
+        // 毛玻璃底层（Material ultraThin dark 观感）
+        _blurView = [[UIVisualEffectView alloc] initWithEffect:
+                     [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark]];
+        _blurView.frame = self.bounds;
+        _blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        _blurView.userInteractionEnabled = NO;
+        [self addSubview:_blurView];
+
         _label = [[UILabel alloc] initWithFrame:CGRectZero];
-        _label.textColor = [UIColor colorWithWhite:1.0 alpha:0.95];
+        _label.textColor = [UIColor colorWithWhite:1.0 alpha:0.96];
         _label.textAlignment = NSTextAlignmentCenter;
         _label.numberOfLines = 1;
-        _label.shadowColor = [UIColor colorWithWhite:0.0 alpha:0.55];
-        _label.shadowOffset = CGSizeMake(0.0, 0.5);
         [self addSubview:_label];
         [self applyBackgroundAlpha:gBarBgAlpha fontSize:gBarFontSize];
 
@@ -192,24 +202,27 @@ static void QFHudMarkTouchArrived(void);
     fontSize = MAX(8.0, MIN(20.0, fontSize));
     gBarBgAlpha = alpha;
     gBarFontSize = fontSize;
-    self.backgroundColor = [UIColor colorWithWhite:0.0 alpha:alpha];
+    // IPA 毛玻璃样式：blurView 管磨砂，这里叠一层调透明度的深色罩
+    self.blurView.alpha = alpha;
+    self.backgroundColor = [UIColor colorWithWhite:0.04 alpha:alpha * 0.55];
     self.layer.borderWidth = alpha > 0.02 ? 0.5 : 0.0;
-    self.label.font = [UIFont monospacedDigitSystemFontOfSize:fontSize weight:UIFontWeightMedium];
+    self.label.font = [UIFont monospacedDigitSystemFontOfSize:fontSize weight:UIFontWeightSemibold];
     [self setNeedsLayout];
 }
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    self.label.frame = CGRectInset(self.bounds, 10.0, 3.0);
+    // 胶囊形：圆角 = 高度一半
+    self.layer.cornerRadius = self.bounds.size.height / 2.0;
+    self.label.frame = CGRectInset(self.bounds, 14.0, 3.0);
 }
 
-- (void)setText:(NSString *)text {
-    if ([self.label.text isEqualToString:text]) return;
-    self.label.text = text;
+- (void)setAttributedText:(NSAttributedString *)text {
+    self.label.attributedText = text;
     CGSize fitted = [self.label sizeThatFits:CGSizeMake(CGFLOAT_MAX, CGFLOAT_MAX)];
     CGPoint center = self.center;
     CGRect bounds = self.bounds;
-    bounds.size = CGSizeMake(MAX(ceil(fitted.width) + 20.0, 72.0), MAX(ceil(fitted.height) + 6.0, 22.0));
+    bounds.size = CGSizeMake(MAX(ceil(fitted.width) + 28.0, 80.0), MAX(ceil(fitted.height) + 8.0, 28.0));
     self.bounds = bounds;
     self.center = center;
     [self setNeedsLayout];
@@ -292,6 +305,11 @@ static BOOL gHudShowNetwork = YES;
 static BOOL gHudShowCPU = YES;
 static BOOL gHudShowMemory = YES;
 static BOOL gHudShowBattery = YES;
+static BOOL gHudShowFPS = YES;
+static BOOL gHudShowVoltage = YES;
+static BOOL gHudShowAmpere = YES;
+static BOOL gHudShowWatt = YES;
+static BOOL gHudShowTemp = YES;
 static BOOL gHudFollowRotation = YES;
 static BOOL gHudHideInLandscape;
 static BOOL gHudLocked;
@@ -521,62 +539,130 @@ static void QFHudPersistPosition(void) {
     QFPreferencesWrite(state);
 }
 
-static NSString *QFHudComposeText(void) {
-    QFMetrics *metrics = [QFMetrics shared];
-    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+// IPA 样式：图标 + 数值 归因字符串
+static NSAttributedString *QFIconAttrText(NSString *iconName, NSString *text,
+                                          NSDictionary *textAttrs, CGFloat fontSize) {
+    UIImageSymbolConfiguration *config =
+        [UIImageSymbolConfiguration configurationWithPointSize:fontSize * 0.88 weight:UIFontWeightMedium];
+    UIImage *icon = [UIImage systemImageNamed:iconName withConfiguration:config];
+    if (!icon) {
+        return [[NSAttributedString alloc] initWithString:text attributes:textAttrs];
+    }
+    UIColor *tint = textAttrs[NSForegroundColorAttributeName] ?: UIColor.whiteColor;
+    icon = [icon imageWithTintColor:tint renderingMode:UIImageRenderingModeAlwaysOriginal];
+    NSTextAttachment *att = [[NSTextAttachment alloc] init];
+    att.image = icon;
+    CGFloat is = fontSize * 0.92;
+    att.bounds = CGRectMake(0, -fontSize * 0.1, is, is);
+    NSMutableAttributedString *result = [[NSMutableAttributedString alloc] init];
+    [result appendAttributedString:[NSAttributedString attributedStringWithAttachment:att]];
+    [result appendAttributedString:[[NSAttributedString alloc] initWithString:@" " attributes:textAttrs]];
+    [result appendAttributedString:[[NSAttributedString alloc] initWithString:text attributes:textAttrs]];
+    return result;
+}
 
-    // ★ 2.1.1：紧凑模式不再吞掉显示项。
-    // 之前这里是「if (gHudCompact) { 只拼网络; return; }」—— 用户点了 CPU / 内存 / 电量的
-    // 开关，偏好确实写进去了、"收到设置变更"也打了，可文字永远只有网络，
-    // 看起来就是"按了没反应"。紧凑的语义应该是"更短"，不是"只剩网络"。
+static NSAttributedString *QFHudComposeText(void) {
+    QFMetrics *metrics = [QFMetrics shared];
+    CGFloat fontSize = gBarFontSize;
+    NSDictionary *attrs = @{
+        NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:fontSize weight:UIFontWeightSemibold],
+        NSForegroundColorAttributeName: [UIColor colorWithWhite:1.0 alpha:0.96],
+    };
+    NSDictionary *sepA = @{
+        NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:fontSize * 0.82 weight:UIFontWeightRegular],
+        NSForegroundColorAttributeName: [UIColor colorWithWhite:1.0 alpha:0.28],
+    };
+    NSAttributedString *sep = [[NSAttributedString alloc] initWithString:@"  " attributes:sepA];
+    NSMutableArray<NSAttributedString *> *items = [NSMutableArray array];
+
     if (gHudCompact) {
-        if (gHudShowNetwork) {
-            [parts addObject:[NSString stringWithFormat:@"↓%@ ↑%@",
-                              [QFMetrics shortRateText:metrics.downloadRate],
-                              [QFMetrics shortRateText:metrics.uploadRate]]];
-        }
         if (gHudShowCPU) {
-            [parts addObject:[NSString stringWithFormat:@"%.0f%%", metrics.cpuPercent]];
+            [items addObject:QFIconAttrText(@"cpu", [NSString stringWithFormat:@"%.0f%%", metrics.cpuPercent], attrs, fontSize)];
+        }
+        if (gHudShowFPS) {
+            [items addObject:QFIconAttrText(@"gauge", [NSString stringWithFormat:@"%.0f", metrics.fps], attrs, fontSize)];
+        }
+        if (gHudShowNetwork) {
+            [items addObject:QFIconAttrText(@"arrow.up", [QFMetrics shortRateText:metrics.uploadRate], attrs, fontSize)];
+            [items addObject:QFIconAttrText(@"arrow.down", [QFMetrics shortRateText:metrics.downloadRate], attrs, fontSize)];
         }
         if (gHudShowMemory) {
-            [parts addObject:[NSString stringWithFormat:@"%.1fG", metrics.memoryGB]];
+            [items addObject:QFIconAttrText(@"memorychip", [NSString stringWithFormat:@"%.1fG", metrics.memoryGB], attrs, fontSize)];
         }
         if (gHudShowBattery) {
-            [parts addObject:[NSString stringWithFormat:@"%ld%%", (long)metrics.batteryPercent]];
+            [items addObject:QFIconAttrText(@"battery.100", [NSString stringWithFormat:@"%ld%%", (long)metrics.batteryPercent], attrs, fontSize)];
         }
-        // 四项全关就老实显示"无显示项"。以前这里会偷偷退回网速，
-        // 用户把网速也关掉后浮条还在跳数字 —— 又是一次"开关没反应"。
-        if (parts.count == 0) return @"无显示项";
-        return [parts componentsJoinedByString:@" "];
+        if (gHudShowVoltage) {
+            [items addObject:QFIconAttrText(@"bolt", [NSString stringWithFormat:@"%.2fV", metrics.voltage], attrs, fontSize)];
+        }
+        if (gHudShowAmpere) {
+            [items addObject:QFIconAttrText(@"waveform.path.ecg", [NSString stringWithFormat:@"%.0fmA", metrics.amperage], attrs, fontSize)];
+        }
+        if (gHudShowWatt) {
+            [items addObject:QFIconAttrText:@"bolt.fill", [NSString stringWithFormat:@"%.1fW", metrics.wattage], attrs, fontSize)];
+        }
+        if (gHudShowTemp) {
+            [items addObject:QFIconAttrText(@"thermometer", [NSString stringWithFormat:@"%.1f°C", metrics.temperature], attrs, fontSize)];
+        }
+    } else {
+    } else {
+        if (gHudShowCPU) {
+            [items addObject:QFIconAttrText(@"cpu", [NSString stringWithFormat:@"%.0f%%", metrics.cpuPercent], attrs, fontSize)];
+        }
+        if (gHudShowFPS) {
+            [items addObject:QFIconAttrText(@"gauge", [NSString stringWithFormat:@"%.0f", metrics.fps], attrs, fontSize)];
+        }
+        if (gHudShowNetwork) {
+            [items addObject:QFIconAttrText(@"arrow.up", [NSString stringWithFormat:@"%@/s", [QFMetrics shortRateText:metrics.uploadRate]], attrs, fontSize)];
+            [items addObject:QFIconAttrText(@"arrow.down", [NSString stringWithFormat:@"%@/s", [QFMetrics shortRateText:metrics.downloadRate]], attrs, fontSize)];
+        }
+        if (gHudShowMemory) {
+            [items addObject:QFIconAttrText(@"memorychip", [NSString stringWithFormat:@"%.1fG", metrics.memoryGB], attrs, fontSize)];
+        }
+        if (gHudShowBattery) {
+            [items addObject:QFIconAttrText(@"battery.100", [NSString stringWithFormat:@"%ld%%", (long)metrics.batteryPercent], attrs, fontSize)];
+        }
+        if (gHudShowVoltage) {
+            [items addObject:QFIconAttrText(@"bolt", [NSString stringWithFormat:@"%.2fV", metrics.voltage], attrs, fontSize)];
+        }
+        if (gHudShowAmpere) {
+            [items addObject:QFIconAttrText(@"waveform.path.ecg", [NSString stringWithFormat:@"%.0fmA", metrics.amperage], attrs, fontSize)];
+        }
+        if (gHudShowWatt) {
+            [items addObject:QFIconAttrText:@"bolt.fill", [NSString stringWithFormat:@"%.1fW", metrics.wattage], attrs, fontSize)];
+        }
+        if (gHudShowTemp) {
+            [items addObject:QFIconAttrText(@"thermometer", [NSString stringWithFormat:@"%.1f°C", metrics.temperature], attrs, fontSize)];
+        }
     }
-
-    if (gHudShowNetwork) {
-        [parts addObject:[NSString stringWithFormat:@"↓%@/s ↑%@/s",
-                          [QFMetrics shortRateText:metrics.downloadRate],
-                          [QFMetrics shortRateText:metrics.uploadRate]]];
+    if (items.count == 0) {    if (items.count == 0) {
+        return [[NSAttributedString alloc] initWithString:@"无显示项" attributes:attrs];
     }
-    if (gHudShowCPU) {
-        [parts addObject:[NSString stringWithFormat:@"CPU %.0f%%", metrics.cpuPercent]];
+    NSMutableAttributedString *result = [[NSMutableAttributedString alloc] init];
+    for (NSUInteger i = 0; i < items.count; i++) {
+        if (i > 0) [result appendAttributedString:sep];
+        [result appendAttributedString:items[i]];
     }
-    if (gHudShowMemory) {
-        [parts addObject:[NSString stringWithFormat:@"%.1fG", metrics.memoryGB]];
-    }
-    if (gHudShowBattery) {
-        [parts addObject:[NSString stringWithFormat:@"电量 %ld%%", (long)metrics.batteryPercent]];
-    }
-    if (parts.count == 0) return @"无显示项";
-    return [parts componentsJoinedByString:@"  "];
+    return result;
 }
 
 static void QFHudRefreshText(void) {
     if (!gHudBar) return;
     // 提示语期间盖掉指标；锁定时给指标加 🔒 前缀 —— 状态必须一眼看得见。
     if (gFlashText && [NSDate timeIntervalSinceReferenceDate] < gFlashUntil) {
-        [gHudBar setText:gFlashText];
+        NSDictionary *fa = @{
+            NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:gBarFontSize weight:UIFontWeightSemibold],
+            NSForegroundColorAttributeName: [UIColor colorWithWhite:1.0 alpha:0.96],
+        };
+        [gHudBar setAttributedText:[[NSAttributedString alloc] initWithString:gFlashText attributes:fa]];
     } else {
-        NSString *text = QFHudComposeText();
-        if (gHudLocked) text = [@"🔒 " stringByAppendingString:text];
-        [gHudBar setText:text];
+        NSAttributedString *text = QFHudComposeText();
+        if (gHudLocked) {
+            NSMutableAttributedString *m = [[NSMutableAttributedString alloc] initWithString:@"🔒 " attributes:fa];
+            [m appendAttributedString:text];
+            text = m;
+        }
+        [gHudBar setAttributedText:text];
     }
     QFHudClampBar();
 }
@@ -679,12 +765,17 @@ static void QFHudShutdown(NSString *reason) {
 
 // 当前生效配置的指纹。用于"配置变了就重读"，不依赖通知能不能送到。
 static NSString *QFHudConfigDigest(NSDictionary *state) {
-    return [NSString stringWithFormat:@"c%d n%d cpu%d mem%d bat%d rot%d hide%d lock%d a%.2f f%.1f",
+    return [NSString stringWithFormat:@"c%d n%d cpu%d mem%d bat%d fps%d v%d a%d w%d t%d rot%d hide%d lock%d a%.2f f%.1f",
             [state[@"compact"] boolValue],
             QFHudFlag(state, @"showNetwork", YES),
             QFHudFlag(state, @"showCPU", YES),
             QFHudFlag(state, @"showMemory", YES),
             QFHudFlag(state, @"showBattery", YES),
+            QFHudFlag(state, @"showFPS", YES),
+            QFHudFlag(state, @"showVoltage", YES),
+            QFHudFlag(state, @"showAmpere", YES),
+            QFHudFlag(state, @"showWatt", YES),
+            QFHudFlag(state, @"showTemp", YES),
             QFHudFlag(state, @"followRotation", YES),
             QFHudFlag(state, @"hideInLandscape", NO),
             QFHudFlag(state, @"locked", NO),
@@ -1110,6 +1201,11 @@ static void QFHudApplyPreferences(void) {
     gHudShowCPU = QFHudFlag(state, @"showCPU", YES);
     gHudShowMemory = QFHudFlag(state, @"showMemory", YES);
     gHudShowBattery = QFHudFlag(state, @"showBattery", YES);
+    gHudShowFPS = QFHudFlag(state, @"showFPS", YES);
+    gHudShowVoltage = QFHudFlag(state, @"showVoltage", YES);
+    gHudShowAmpere = QFHudFlag(state, @"showAmpere", YES);
+    gHudShowWatt = QFHudFlag(state, @"showWatt", YES);
+    gHudShowTemp = QFHudFlag(state, @"showTemp", YES);
     gHudFollowRotation = QFHudFlag(state, @"followRotation", YES);
     gHudHideInLandscape = QFHudFlag(state, @"hideInLandscape", NO);
     gHudLocked = QFHudFlag(state, @"locked", NO);

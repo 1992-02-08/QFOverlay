@@ -438,35 +438,90 @@ static BOOL QFHostFlag(NSDictionary *state, NSString *key, BOOL fallback) {
 // 偏好写进去了、日志也打了，可这条文字根本不读偏好。
 // 现在逐项按开关拼，规则与 HUD 进程里的 QFHudComposeText 完全一致：
 // 紧凑模式只省略单位与标签，不吞项目。
-static NSString *QFHostComposeText(NSDictionary *state, QFMetrics *metrics) {
+// IPA 样式：图标 + 数值 归因字符串
+static NSAttributedString *QFHostIconText(NSString *iconName, NSString *text,
+                                          NSDictionary *textAttrs, CGFloat fontSize) {
+    UIImageSymbolConfiguration *config =
+        [UIImageSymbolConfiguration configurationWithPointSize:fontSize * 0.88 weight:UIFontWeightMedium];
+    UIImage *icon = [UIImage systemImageNamed:iconName withConfiguration:config];
+    if (!icon) return [[NSAttributedString alloc] initWithString:text attributes:textAttrs];
+    UIColor *tint = textAttrs[NSForegroundColorAttributeName] ?: UIColor.whiteColor;
+    icon = [icon imageWithTintColor:tint renderingMode:UIImageRenderingModeAlwaysOriginal];
+    NSTextAttachment *att = [[NSTextAttachment alloc] init];
+    att.image = icon;
+    CGFloat is = fontSize * 0.92;
+    att.bounds = CGRectMake(0, -fontSize * 0.1, is, is);
+    NSMutableAttributedString *result = [[NSMutableAttributedString alloc] init];
+    [result appendAttributedString:[NSAttributedString attributedStringWithAttachment:att]];
+    [result appendAttributedString:[[NSAttributedString alloc] initWithString:@" " attributes:textAttrs]];
+    [result appendAttributedString:[[NSAttributedString alloc] initWithString:text attributes:textAttrs]];
+    return result;
+}
+
+static NSAttributedString *QFHostComposeText(NSDictionary *state, QFMetrics *metrics) {
     BOOL compact = QFHostFlag(state, @"compact", NO);
     BOOL showNetwork = QFHostFlag(state, @"showNetwork", YES);
     BOOL showCPU = QFHostFlag(state, @"showCPU", YES);
     BOOL showMemory = QFHostFlag(state, @"showMemory", YES);
     BOOL showBattery = QFHostFlag(state, @"showBattery", YES);
+    BOOL showFPS = QFHostFlag(state, @"showFPS", YES);
+    BOOL showVoltage = QFHostFlag(state, @"showVoltage", YES);
+    BOOL showAmpere = QFHostFlag(state, @"showAmpere", YES);
+    BOOL showWatt = QFHostFlag(state, @"showWatt", YES);
+    BOOL showTemp = QFHostFlag(state, @"showTemp", YES);
+
+    CGFloat fontSize = state[@"fontSize"] ? [state[@"fontSize"] doubleValue] : 11.5;
+    NSDictionary *attrs = @{
+        NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:fontSize weight:UIFontWeightSemibold],
+        NSForegroundColorAttributeName: [UIColor colorWithWhite:1.0 alpha:0.96],
+    };
+    NSDictionary *sepA = @{
+        NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:fontSize * 0.82 weight:UIFontWeightRegular],
+        NSForegroundColorAttributeName: [UIColor colorWithWhite:1.0 alpha:0.28],
+    };
+    NSAttributedString *sep = [[NSAttributedString alloc] initWithString:@"  " attributes:sepA];
+    NSMutableArray<NSAttributedString *> *items = [NSMutableArray array];
 
     NSString *down = [QFMetrics shortRateText:metrics.downloadRate];
     NSString *up = [QFMetrics shortRateText:metrics.uploadRate];
 
-    NSMutableArray<NSString *> *parts = [NSMutableArray array];
     if (showNetwork) {
-        [parts addObject:compact ? [NSString stringWithFormat:@"↓%@ ↑%@", down, up]
-                                 : [NSString stringWithFormat:@"↓%@/s ↑%@/s", down, up]];
+        [items addObject:QFHostIconText(@"arrow.up", compact ? up : [NSString stringWithFormat:@"%@/s", up], attrs, fontSize)];
+        [items addObject:QFHostIconText(@"arrow.down", compact ? down : [NSString stringWithFormat:@"%@/s", down], attrs, fontSize)];
     }
     if (showCPU) {
-        [parts addObject:compact ? [NSString stringWithFormat:@"%.0f%%", metrics.cpuPercent]
-                                 : [NSString stringWithFormat:@"CPU %.0f%%", metrics.cpuPercent]];
+        [items addObject:QFHostIconText(@"cpu", [NSString stringWithFormat:@"%.0f%%", metrics.cpuPercent], attrs, fontSize)];
     }
     if (showMemory) {
-        [parts addObject:[NSString stringWithFormat:@"%.1fG", metrics.memoryGB]];
+        [items addObject:QFHostIconText(@"memorychip", [NSString stringWithFormat:@"%.1fG", metrics.memoryGB], attrs, fontSize)];
     }
     if (showBattery) {
-        [parts addObject:compact ? [NSString stringWithFormat:@"%ld%%", (long)metrics.batteryPercent]
-                                 : [NSString stringWithFormat:@"电量 %ld%%", (long)metrics.batteryPercent]];
+        [items addObject:QFHostIconText(@"battery.100", [NSString stringWithFormat:@"%ld%%", (long)metrics.batteryPercent], attrs, fontSize)];
     }
-    // 四项全关：缩成一个小胶囊。看得见"确实关掉了"，而不是每次都得去设置里确认。
-    if (parts.count == 0) return @"无显示项";
-    return [parts componentsJoinedByString:compact ? @" " : @"  "];
+    if (showFPS) {
+        [items addObject:QFHostIconText(@"gauge", [NSString stringWithFormat:@"%.0f", metrics.fps], attrs, fontSize)];
+    }
+    if (showVoltage) {
+        [items addObject:QFHostIconText(@"bolt", [NSString stringWithFormat:@"%.2fV", metrics.voltage], attrs, fontSize)];
+    }
+    if (showAmpere) {
+        [items addObject:QFHostIconText(@"waveform.path.ecg", [NSString stringWithFormat:@"%.0fmA", metrics.amperage], attrs, fontSize)];
+    }
+    if (showWatt) {
+        [items addObject:QFHostIconText(@"bolt.fill", [NSString stringWithFormat:@"%.1fW", metrics.wattage], attrs, fontSize)];
+    }
+    if (showTemp) {
+        [items addObject:QFHostIconText(@"thermometer", [NSString stringWithFormat:@"%.1f°C", metrics.temperature], attrs, fontSize)];
+    }
+    if (items.count == 0) {
+        return [[NSAttributedString alloc] initWithString:@"无显示项" attributes:attrs];
+    }
+    NSMutableAttributedString *result = [[NSMutableAttributedString alloc] init];
+    for (NSUInteger i = 0; i < items.count; i++) {
+        if (i > 0) [result appendAttributedString:sep];
+        [result appendAttributedString:items[i]];
+    }
+    return result;
 }
 
 - (void)syncFallbackBar {
@@ -564,7 +619,7 @@ static NSString *QFHostComposeText(NSDictionary *state, QFMetrics *metrics) {
 
     // 浮条的紧凑状态以共享偏好为准（点浮条切换时会写回去）。
     [QFFloatingBar shared].compact = QFHostFlag(state, @"compact", NO);
-    NSString *text = QFHostComposeText(state, metrics);
+    NSAttributedString *text = QFHostComposeText(state, metrics);
     [[QFFloatingBar shared] updateText:text];
     [[QFPiPBar shared] updateText:text];
 

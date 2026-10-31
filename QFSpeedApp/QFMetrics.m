@@ -7,6 +7,8 @@
 #import <mach/mach.h>
 #import <mach/mach_host.h>
 #import <mach/processor_info.h>
+#import <IOKit/IOKitLib.h>
+#import <QuartzCore/QuartzCore.h>
 
 static double QFCPUSample(void) {
     static processor_info_array_t previous = NULL;
@@ -72,6 +74,81 @@ static BOOL QFNetworkTotals(uint64_t *bytesIn, uint64_t *bytesOut) {
     return YES;
 }
 
+// IOKit 电池传感器：读取电压/电流/温度（越狱设备 AppleSmartBattery）
+static BOOL QFBatterySensor(double *voltage, double *amperage, double *temperature) {
+    if (voltage) *voltage = 0.0;
+    if (amperage) *amperage = 0.0;
+    if (temperature) *temperature = 0.0;
+
+    io_service_t service = IOServiceGetMatchingService(kIOMainPortDefault,
+                                                       IOServiceMatching("AppleSmartBattery"));
+    if (!service) return NO;
+
+    CFNumberRef cfVoltage = IORegistryEntryCreateCFProperty(service, CFSTR("Voltage"), kCFAllocatorDefault, 0);
+    CFNumberRef cfAmperage = IORegistryEntryCreateCFProperty(service, CFSTR("Amperage"), kCFAllocatorDefault, 0);
+    CFNumberRef cfTemp = IORegistryEntryCreateCFProperty(service, CFSTR("Temperature"), kCFAllocatorDefault, 0);
+
+    if (cfVoltage && voltage) {
+        int mv = 0;
+        CFNumberGetValue(cfVoltage, kCFNumberIntType, &mv);
+        *voltage = mv / 1000.0; // mV -> V
+        CFRelease(cfVoltage);
+    }
+    if (cfAmperage && amperage) {
+        int ma = 0;
+        CFNumberGetValue(cfAmperage, kCFNumberIntType, &ma);
+        *amperage = (double)ma; // mA
+        CFRelease(cfAmperage);
+    }
+    if (cfTemp && temperature) {
+        int deciC = 0;
+        CFNumberGetValue(cfTemp, kCFNumberIntType, &deciC);
+        *temperature = deciC / 10.0; // 0.1°C -> °C
+        CFRelease(cfTemp);
+    }
+
+    IOObjectRelease(service);
+    return YES;
+}
+
+// FPS 采样：CADisplayLink 回调计帧
+@interface QFFPSCounter : NSObject
+@property (nonatomic, readonly) double currentFPS;
+- (void)start;
+- (void)stop;
+@end
+
+@implementation QFFPSCounter {
+    CADisplayLink *_link;
+    NSInteger _frameCount;
+    CFTimeInterval _lastTime;
+}
+
+- (void)start {
+    if (_link) return;
+    _frameCount = 0;
+    _lastTime = CACurrentMediaTime();
+    _link = [CADisplayLink displayLinkWithTarget:self selector:@selector(tick:)];
+    [_link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+}
+
+- (void)stop {
+    [_link invalidate];
+    _link = nil;
+}
+
+- (void)tick:(CADisplayLink *)link {
+    _frameCount++;
+    CFTimeInterval elapsed = link.timestamp - _lastTime;
+    if (elapsed >= 0.5) {
+        _currentFPS = _frameCount / elapsed;
+        _frameCount = 0;
+        _lastTime = link.timestamp;
+    }
+}
+
+@end
+
 @implementation QFMetrics {
     NSTimeInterval _previousTime;
     uint64_t _previousIn;
@@ -91,6 +168,8 @@ static BOOL QFNetworkTotals(uint64_t *bytesIn, uint64_t *bytesOut) {
     if ((self = [super init])) {
         UIDevice *device = [UIDevice currentDevice];
         device.batteryMonitoringEnabled = YES;
+        _fpsCounter = [QFFPSCounter new];
+        [_fpsCounter start];
         [self sample];
     }
     return self;
@@ -116,6 +195,16 @@ static BOOL QFNetworkTotals(uint64_t *bytesIn, uint64_t *bytesOut) {
 
     float level = [UIDevice currentDevice].batteryLevel;
     _batteryPercent = level >= 0 ? (NSInteger)lroundf(level * 100.0f) : -1;
+
+    // IPA 扩展指标：FPS + 电池传感器
+    _fps = _fpsCounter.currentFPS;
+    double v = 0, a = 0, t = 0;
+    if (QFBatterySensor(&v, &a, &t)) {
+        _voltage = v;
+        _amperage = a;
+        _temperature = t;
+        _wattage = v * a / 1000.0; // V * mA / 1000 = W
+    }
 }
 
 + (NSString *)rateText:(double)bytesPerSecond {
