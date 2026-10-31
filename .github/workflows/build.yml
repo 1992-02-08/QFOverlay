@@ -16,7 +16,9 @@ jobs:
         run: brew install ldid
 
       - name: Build .tipa
-        run: ./build-tipa.sh
+        run: |
+          chmod +x build-tipa.sh
+          ./build-tipa.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
