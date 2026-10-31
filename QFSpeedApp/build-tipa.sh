@@ -86,11 +86,15 @@ PY
 
 cp Info.plist "${APP}/Info.plist"
 
-echo "==> 图标"
-if command -v python3 >/dev/null 2>&1; then
-    python3 make-icon.py "${APP}" || echo "    (图标生成跳过：缺少 PIL，App 会显示白图标，不影响功能)"
+echo "==> 图标（用 sips 从 icon-src.jpg 缩放，无需 Pillow）"
+if [ -f icon-src.jpg ] && command -v sips >/dev/null 2>&1; then
+    # 先转成正方形大图，再出各尺寸
+    sips -z 1024 1024 icon-src.jpg --out "${APP}/AppIcon.png" >/dev/null 2>&1
+    sips -z 180 180   icon-src.jpg --out "${APP}/Icon-60@3x.png" >/dev/null 2>&1
+    sips -z 120 120   icon-src.jpg --out "${APP}/Icon-60@2x.png" >/dev/null 2>&1
+    echo "    图标已生成（剪影图）"
 else
-    echo "    跳过（没有 python3，App 会显示白图标）"
+    echo "    跳过（缺 icon-src.jpg 或 sips，App 显示白图标）"
 fi
 
 echo "==> 打包 ${OUT}"

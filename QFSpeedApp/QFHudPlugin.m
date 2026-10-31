@@ -548,7 +548,8 @@ static NSAttributedString *QFIconAttrText(NSString *iconName, NSString *text,
     if (!icon) {
         return [[NSAttributedString alloc] initWithString:text attributes:textAttrs];
     }
-    UIColor *tint = textAttrs[NSForegroundColorAttributeName] ?: UIColor.whiteColor;
+    // 图标用独立的深红色（比文字更深），文字单独用红色
+    UIColor *tint = [UIColor colorWithRed:0.72 green:0.08 blue:0.06 alpha:0.95];
     icon = [icon imageWithTintColor:tint renderingMode:UIImageRenderingModeAlwaysOriginal];
     NSTextAttachment *att = [[NSTextAttachment alloc] init];
     att.image = icon;
@@ -566,7 +567,7 @@ static NSAttributedString *QFHudComposeText(void) {
     CGFloat fontSize = gBarFontSize;
     NSDictionary *attrs = @{
         NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:fontSize weight:UIFontWeightSemibold],
-        NSForegroundColorAttributeName: [UIColor colorWithWhite:1.0 alpha:0.96],
+        NSForegroundColorAttributeName: [UIColor colorWithRed:1.0 green:0.23 blue:0.19 alpha:0.98],
     };
     NSDictionary *sepA = @{
         NSFontAttributeName: [UIFont monospacedDigitSystemFontOfSize:fontSize * 0.82 weight:UIFontWeightRegular],
