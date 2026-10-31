@@ -548,7 +548,7 @@ static NSAttributedString *QFIconAttrText(NSString *iconName, NSString *text,
     if (!icon) {
         return [[NSAttributedString alloc] initWithString:text attributes:textAttrs];
     }
-    // 图标用独立的深红色（比文字更深），文字单独用红色
+    // 图标保持白色，文字单独用红色
     UIColor *tint = [UIColor colorWithWhite:1.0 alpha:0.96];
     icon = [icon imageWithTintColor:tint renderingMode:UIImageRenderingModeAlwaysOriginal];
     NSTextAttachment *att = [[NSTextAttachment alloc] init];
