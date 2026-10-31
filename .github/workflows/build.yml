@@ -1,4 +1,4 @@
-name: Build QFOverlay .tipa
+name: Build QFSpeed .tipa
 
 on:
   workflow_dispatch:        # 手动在 Actions 页点 Run workflow 即可触发
@@ -12,17 +12,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install ldid
-        run: brew install ldid
+      - name: Install ldid + Pillow（图标生成用）
+        run: |
+          brew install ldid
+          python3 -m pip install --user Pillow || echo "Pillow 安装失败，图标将跳过（不影响功能）"
 
       - name: Build .tipa
         run: |
+          cd QFSpeedApp
           chmod +x build-tipa.sh
-          ./build-tipa.sh
+          bash build-tipa.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QFOverlay-tipa
-          path: "*.tipa"
+          name: QFSpeed-tipa
+          path: "QFSpeedApp/QFSpeed-*.tipa"
           if-no-files-found: error

@@ -1,64 +1,57 @@
-# QFOverlay —— 全局拖动 + 常驻显示浮窗模块（自包含）
+# QFSpeed —— 全功能常驻浮窗（网速 / CPU / 信号 / 设置 / 图表）+ 全局拖动
 
-把 2.1.6 参考里的浮窗核心（常驻窗口托管 + 全局拖动）抽成自包含模块，数据来源解耦：
-浮条显示什么文字由宿主工程通过 `+setOverlayText:` 喂入，模块本身不做任何网速/CPU 采样。
+完整移植自 QFSpeed 2.1.6 源码：浮窗**常驻显示**（切 App / 回桌面 / 锁屏都在）、**全局拖动**，
+并显示实时**网速采样、CPU 监控、内存、电池**，带**设置面板**与**图表绘制**（PiP 浮条）。
+全部功能保留，不再做解耦裁剪。
 
 > 本仓库是「可直接在 GitHub Actions 上编译出 .tipa」的完整工程。
-> `QFOverlay/` 是模块本体，`HostApp/` 只是验证用演示宿主（可整目录删掉换成你自己的 QFSpeed）。
+> 浮窗核心在 `QFSpeedApp/` 下，构建由 `QFSpeedApp/build-tipa.sh` 完成。
 
 ## 目录
-- `QFOverlay/QFOverlayHUD.h` / `.m` —— 浮窗模块（常驻 + 拖动全部逻辑）
-- `QFOverlay/entitlements.plist` —— 常驻窗口 + 拖动所需关键权限
-- `HostApp/` —— 演示 App（按钮拉起浮窗 + 每秒喂一条假网速）
-- `build-tipa.sh` —— clang arm64 + ldid 构建脚本
+- `QFShared.h` —— App 与浮窗进程共用的约定（共享偏好 / 心跳 / 权限自检 / 日志）
+- `QFSpeedApp/main.m` —— 入口：`无参数` 跑主 App（设置 + 开关），`-hud` 跑插件进程
+- `QFSpeedApp/QFHudPlugin.m` —— 常驻窗口托管 + 全局拖动 + 轮询主循环（核心，2004 行）
+- `QFSpeedApp/QFMetrics.m` —— 性能采样（网速 / CPU / 内存 / 电池）
+- `QFSpeedApp/QFPiPBar.m` —— PiP 浮条 + 图表绘制
+- `QFSpeedApp/QFSettingsPanel.m` —— 设置面板
+- `QFSpeedApp/QFFloatingBar.m` / `QFHostController.m` —— 浮条与宿主控制
+- `QFSpeedApp/build-tipa.sh` —— clang arm64 + ldid 构建脚本（校验 entitlements）
+- `QFSpeedApp/entitlements.plist` —— 常驻窗口 + 拖动 + 监听所需的完整权限
 - `.github/workflows/build.yml` —— macOS runner 自动构建并上传 .tipa
 
-## 模块公开接口
-```objc
-[QFOverlayHUD runPlugin];        // main 里 argv[1]=="-hud" 时调用，永不返回
-[QFOverlayHUD spawn];           // 拉起浮窗子进程（posix_spawn 同一二进制 + "-hud"）
-[QFOverlayHUD setOverlayText:];  // 宿主喂文字（网速/CPU 等自己算好传进来）
-[QFOverlayHUD setEnabled:];
-[QFOverlayHUD terminate];
-[QFOverlayHUD isRunning];
-[QFOverlayHUD resetPosition];
-[QFOverlayHUD setLocked:];  [QFOverlayHUD isLocked];
-```
-浮条交互（模块内，不碰宿主其他功能）：拖动移位置 / 轻点切紧凑·完整 / 长按锁定位置。
+## 浮窗交互（内置）
+- 拖动 → 移动浮条位置（松手按归一化坐标记忆，旋转不丢）
+- 轻点 → 切换紧凑 / 完整样式
+- 长按 → 锁定位置
 
-## 接入你自己的 QFSpeed（其他不要动）
-1. 把 `QFOverlay/` 整目录复制进你的工程。
-2. 在你的 `main.m` 加 `-hud` 分流（见 `HostApp/main.m`）：
-   ```objc
-   if (argc > 1 && strcmp(argv[1], "-hud") == 0) { [QFOverlayHUD runPlugin]; }
-   ```
-3. 把 `QFOverlay/entitlements.plist` 里的 `application-identifier` 改成你 app 的 bundle id，
-   并把这些权限合并进你工程已有的 entitlements（缺 `com.apple.springboard.accessibility-window-hosting`
-   或 `platform-application` 时，浮窗常驻会失效，但日志正常）。
-4. 把 `QFOverlayHUD.m` 加进主可执行文件的编译源（它是被 `-hud` 子进程复用同一个二进制的）。
-5. 在你原来的「开关」逻辑里调 `[QFOverlayHUD spawn]` / `[QFOverlayHUD setOverlayText:...]` / `[QFOverlayHUD terminate]`。
-6. `HostApp/` 可整目录删除。
+## 构建（GitHub Actions 自动完成）
+推到 `main`（或到仓库 **Actions → Run workflow** 手动触发）后，macOS runner 会：
+1. `brew install ldid`，`pip install Pillow`（图标生成）
+2. `cd QFSpeedApp && bash build-tipa.sh` —— arm64 单架构编译 + ldid 签名 + 校验关键 entitlements + 打包 `QFSpeed-2.1.6.tipa`
+3. 上传 Artifacts
+
+> **关键约束**：只编 `arm64` 单架构。fat（arm64+arm64e）会让 entitlements blob 损坏，
+> 后果是「日志全正常、屏幕什么都没有」。A12+ 设备跑 arm64 用户态二进制没问题。
 
 ## 本地推到 GitHub（用你给的 PAT）
-当前编写环境无外网，仓库已在本地建好并提交，到你**有网的机器**上执行：
 ```bash
 cd QFOverlay-Build
 git remote add origin https://<你的PAT>@github.com/1992-02-08/QFOverlay.git
 git branch -M main
 git push -u origin main
 ```
-（`<你的PAT>` 换成你给我的那个 `ghp_...` token；仓库名 `QFOverlay` 可改。）
-
-## 触发构建
-推上去后，到 GitHub 仓库的 **Actions → Build QFOverlay .tipa → Run workflow** 手动触发，
-或任意一次 push 到 `main` 会自动触发。产物 `.tipa` 在 Artifacts 里下载，用 TrollStore 安装。
+（`<你的PAT>` 换成你的 `ghp_...` token；仓库名 `QFOverlay` 可改。）
 
 ## 验证
-装上后打开 App → 点「启动浮窗」→ 应看到浮条常驻；切到别的 App / 锁屏再回来浮条还在；
-可拖动、轻点切换、长按锁定。浮条不出现先翻设备日志
-`/var/mobile/Library/Logs/QFOverlay.log`，启动时会打一份权限自检。
+TrollStore 安装 `.tipa` → 打开 QFSpeed → 启动浮窗 → 应看到浮条常驻且显示实时网速/CPU；
+切到别的 App / 锁屏再回来浮条还在；可拖动、轻点切换、长按锁定。
+浮条不出现先翻设备日志 `/var/mobile/Library/Logs/QFOverlay.log`，启动会打一份 `[权限自检]`
+（platform / sandbox / winHosting / backboard / hid / 系统目录写入），一眼看出是权限缺还是窗口注册失败。
 
 ## 已知边界
-- v1.0 的 QFSpeed.ipa 二进制里**本来就没有浮窗代码**，所以这是「移植模块」而非「在原包上修」；
-  模块对宿主零侵入，共享偏好走独立域 `com.qfoverlay.module`。
+- 参考的 v1.0 `QFSpeed.ipa` 二进制里**本来就没有浮窗代码**，所以这是「移植 2.1.6 完整源码」而非「在原包上修」；
+  2.1.6 本身就是带全部功能的成熟版本，常驻 + 拖动机制即从此版本抽取。
 - 真机编译需要 macOS + Xcode SDK + ldid，本仓库的 Actions 已配好；本地沙箱无法编译 iOS。
+- 当前 App 身份为参考源码的 `com.wacljcr.qfspeed.host`（显示名 QFSpeed）。若要并入你自己工程，
+  把 `QFSpeedApp/` 里的 `QFHudPlugin` / `QFMetrics` / `QFPiPBar` / `QFSettingsPanel` / `QFShared.h`
+  作为源文件加入主二进制，并 `main.m` 保留 `-hud` 分流即可。
