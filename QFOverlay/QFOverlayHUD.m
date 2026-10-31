@@ -782,6 +782,9 @@ static pid_t QFOverlaySpawnArgument(NSString *argument, BOOL detached) {
     }
     return -1;
 }
+
+@implementation QFOverlayHUD
+
 + (BOOL)isAvailable { return objc_getClass("SBSAccessibilityWindowHostingController") != NULL; }
 
 static NSArray<NSNumber *> *QFOverlayLiveInstances(void) {
@@ -962,6 +965,8 @@ static BOOL QFOverlayBoolMsg(id object, NSString *selName) {
 
 #pragma mark - 事件源装配（触摸通路的必要条件）
 
+@end
+
 @interface QFOverlayApplication : UIApplication @end
 @implementation QFOverlayApplication
 - (instancetype)init {
@@ -1014,6 +1019,8 @@ static BOOL QFOverlayBoolMsg(id object, NSString *selName) {
 @end
 
 #pragma mark - 插件进程入口
+
+@implementation QFOverlayHUD
 
 + (void)runPlugin {
     @autoreleasepool {

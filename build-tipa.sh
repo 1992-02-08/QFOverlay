@@ -21,6 +21,7 @@ echo "==> SDK: ${SDK}"
 echo "==> 编译（arm64 单架构）"
 clang -arch arm64 \
       -isysroot "${SDK}" \
+      -IQFOverlay \
       -miphoneos-version-min=14.0 \
       -fobjc-arc -fblocks -O2 -Wno-deprecated-declarations \
       -framework UIKit -framework Foundation -framework QuartzCore -framework CoreGraphics \
